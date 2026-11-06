@@ -22,9 +22,137 @@ A dual-mode optical wireless communication system using light (Li-Fi) built with
 
 ---
 
-## 🔌 Circuit Connection Guide
+## 🔌 Circuit Connection Guide & Diagrams
 
-### 1. Arduino Leonardo (Transmitter Unit)
+### 1. Circuit Schematic Diagrams
+
+#### Full System Architecture (Optical Li-Fi Link + Control Bus)
+```mermaid
+flowchart LR
+    subgraph TX["Arduino Leonardo (Transmitter)"]
+        D9["Pin D9"]
+        D10["Pin D10"]
+        TX_GND["GND"]
+        D0["D0 (RX1)"]
+        D1["D1 (TX1)"]
+    end
+
+    subgraph OPTICAL_TX["Transmitter Optical Stage"]
+        R1["Resistor 220Ω"]
+        R2["Resistor 220Ω"]
+        LED1["White / Red LED 1"]
+        LED2["White / Red LED 2"]
+    end
+
+    subgraph OPTICAL_RX["Receiver Optical Stage"]
+        LDR["LDR Sensor Module<br/>(DO Pin)"]
+    end
+
+    subgraph RX["Arduino Uno (Receiver)"]
+        RX_D8["Pin D8 (Data In)"]
+        RX_D12["Pin D12 (SoftSerial TX)"]
+        RX_D13["Pin D13 (SoftSerial RX)"]
+        RX_GND["GND"]
+    end
+
+    %% TX Optical Wiring
+    D9 --> R1 --> LED1 --> TX_GND
+    D10 --> R2 --> LED2 --> TX_GND
+
+    %% Optical Light Channel
+    LED1 -. "Light Pulses (Li-Fi)" .-> LDR
+    LED2 -. "Light Pulses (Li-Fi)" .-> LDR
+
+    %% Receiver Sensor Wiring
+    LDR --> RX_D8
+
+    %% Inter-board sync serial connection
+    RX_D12 -->|"Sync/Speed Commands"| D0
+    D1 -->|"Status/Acks"| RX_D13
+    TX_GND <===>|"Common Ground Reference"| RX_GND
+```
+
+#### Detailed Receiver Wiring (Sensors, LCD, Buttons, Buzzer)
+```mermaid
+flowchart TD
+    subgraph UNO["Arduino Uno Microcontroller"]
+        PIN_5V["5V Power Rail"]
+        PIN_GND["GND Power Rail"]
+        
+        A4["Pin A4 (SDA)"]
+        A5["Pin A5 (SCL)"]
+        
+        D2["Pin D2 (INPUT_PULLUP)"]
+        D3["Pin D3 (INPUT_PULLUP)"]
+        D4["Pin D4 (INPUT_PULLUP)"]
+        D5["Pin D5 (INPUT_PULLUP)"]
+        D6["Pin D6 (INPUT_PULLUP)"]
+        
+        D7["Pin D7 (OUTPUT)"]
+        A0["Pin A0 (OUTPUT)"]
+        D8["Pin D8 (INPUT)"]
+    end
+
+    subgraph DISPLAY["16x2 I2C LCD"]
+        LCD_VCC["VCC"]
+        LCD_GND["GND"]
+        LCD_SDA["SDA"]
+        LCD_SCL["SCL"]
+    end
+
+    subgraph BUTTONS["User Control Buttons"]
+        BTN_SP_UP["Speed Up Button (+)"]
+        BTN_SP_DN["Speed Down Button (-)"]
+        BTN_HOME["Home Screen Button"]
+        BTN_RESET["Reset / Listen Button"]
+        BTN_MODE["Mode Toggle Button (ASCII / Morse)"]
+    end
+
+    subgraph SENSORS_OUTPUTS["Peripherals"]
+        LDR_MOD["LDR Light Sensor Module"]
+        BUZZER["Piezo Buzzer"]
+        LED_STATUS["Status Indicator LED"]
+        R_LED["220Ω Resistor"]
+    end
+
+    %% Power
+    PIN_5V --> LCD_VCC
+    PIN_5V --> LDR_MOD
+    PIN_GND --> LCD_GND
+    PIN_GND --> LDR_MOD
+
+    %% I2C LCD
+    A4 --> LCD_SDA
+    A5 --> LCD_SCL
+
+    %% Buttons to GND
+    D2 --> BTN_SP_UP --> PIN_GND
+    D3 --> BTN_SP_DN --> PIN_GND
+    D4 --> BTN_HOME --> PIN_GND
+    D5 --> BTN_RESET --> PIN_GND
+    D6 --> BTN_MODE --> PIN_GND
+
+    %% Status Output
+    D7 --> R_LED --> LED_STATUS --> PIN_GND
+    A0 --> BUZZER --> PIN_GND
+
+    %% Sensor
+    LDR_MOD -->|"Digital Output (DO)"| D8
+```
+
+#### Detailed ASCII Packet Diagram
+```text
++----------------------------------------------------------------------------------------------------+
+|                                    ASCII Li-Fi Frame Structure                                     |
++-------------+-------------+---------------+---------------+--------------------+---------+---------+
+|  PREAMBLE   |    SYNC     |  START BYTE   |  PAYLOAD LEN  |   DATA PAYLOAD     |  CRC-8  |   EOF   |
+| 0xAA (8-bit)| 0x55 (8-bit)|  0x02 (8-bit) | (1-32 Bytes)  | (Character Bytes)  | (1 Byte)|  0x03   |
++-------------+-------------+---------------+---------------+--------------------+---------+---------+
+```
+
+---
+
+### 2. Arduino Leonardo (Transmitter Unit)
 
 The transmitter uses high-brightness LEDs to emit optical pulses based on text sent via the USB Serial Monitor.
 
@@ -40,7 +168,7 @@ The transmitter uses high-brightness LEDs to emit optical pulses based on text s
 
 ---
 
-### 2. Arduino Uno (Receiver Unit)
+### 3. Arduino Uno (Receiver Unit)
 
 The receiver monitors light transitions using an LDR sensor module, decodes incoming ASCII packets or Morse signals, displays information on the LCD, and controls communication speed and modes.
 
@@ -67,7 +195,7 @@ The receiver monitors light transitions using an LDR sensor module, decodes inco
 
 ---
 
-### 3. Board-to-Board Interconnect (Uno ↔ Leonardo)
+### 4. Board-to-Board Interconnect (Uno ↔ Leonardo)
 
 A 3-wire serial link synchronizes speed, mode, and reset states between both boards:
 
